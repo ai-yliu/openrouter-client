@@ -1,0 +1,8 @@
+README.md
+setup.py
+openrouter_client.egg-info/PKG-INFO
+openrouter_client.egg-info/SOURCES.txt
+openrouter_client.egg-info/dependency_links.txt
+openrouter_client.egg-info/entry_points.txt
+openrouter_client.egg-info/requires.txt
+openrouter_client.egg-info/top_level.txt

@@ -1,0 +1,13 @@
+OpenRouter API Client Test
+
+This is a sample text file to test the OpenRouter API client. 
+
+The OpenRouter API provides access to various AI models through a unified interface. This client allows you to process text, images, and PDF files through the API and get responses from the selected model.
+
+Key features of the OpenRouter API:
+1. Access to multiple AI models
+2. Unified API interface
+3. Support for text and image inputs
+4. Configurable parameters
+
+This text file is being used to test the text processing capabilities of the client.

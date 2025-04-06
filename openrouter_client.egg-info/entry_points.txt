@@ -1,0 +1,2 @@
+[console_scripts]
+openrouter-client = openrouter.openrouter_client:main
