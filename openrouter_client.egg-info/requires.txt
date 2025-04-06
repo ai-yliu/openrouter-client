@@ -1,2 +1,6 @@
-requests
-PyPDF2
+requests>=2.25.1
+PyPDF2>=2.0.0
+
+[dev]
+pytest>=6.0
+black>=21.0

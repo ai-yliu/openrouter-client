@@ -109,6 +109,57 @@ Specify an output file:
 python -m openrouter.openrouter_client --input /path/to/image.jpg --config config.ini --output results.txt
 ```
 
+## JSON Comparison Tool Usage
+
+The package includes a tool to compare JSON outputs from different LLM runs:
+
+### Command Line Usage
+```bash
+compare-json file1.json file2.json
+
+# Save to specific file
+compare-json file1.json file2.json --output comparison.json
+
+# Save to directory (auto-generated filename)
+compare-json file1.json file2.json --output-dir ./comparisons
+```
+
+### Programmatic Usage
+```python
+from json_comparator import compare_json_files
+
+# Compare files and get results dictionary
+result = compare_json_files("output1.json", "output2.json")
+
+# Save comparison to file
+compare_json_files("llm1.json", "llm2.json", 
+                   output_file="comparison.json")
+
+# Save to directory with auto-generated filename  
+compare_json_files("run1.json", "run2.json",
+                   output_path="./results")
+```
+
+### Features
+- Case-insensitive comparison
+- Preserves original casing in output  
+- Identifies:
+  - `match`: Items appearing in both files
+  - `addition`: Items only in first file  
+  - `omission`: Items only in second file
+- Handles empty lists as matches
+  
+### Sample Output
+```json
+{
+  "Entities": {
+    "Company A": "match",
+    "Company B": "addition",
+    "COMPANY C": "omission"
+  },
+  "EmptyList": {"": "match"}
+}
+
 ## Configuration
 
 Create a configuration file with the following parameters:

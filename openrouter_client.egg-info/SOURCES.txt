@@ -6,3 +6,4 @@ openrouter_client.egg-info/dependency_links.txt
 openrouter_client.egg-info/entry_points.txt
 openrouter_client.egg-info/requires.txt
 openrouter_client.egg-info/top_level.txt
+tests/test_json_comparator.py
