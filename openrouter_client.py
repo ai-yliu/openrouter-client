@@ -26,7 +26,9 @@ def main():
     parser = argparse.ArgumentParser(description="Process files through the OpenRouter API")
     parser.add_argument("--input", required=True, help="Path to input file (image, PDF, or text)")
     parser.add_argument("--config", required=True, help="Path to configuration file")
-    parser.add_argument("--output", help="Path to output file (optional)")
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument("--output", help="Complete output file path including filename")
+    output_group.add_argument("--output-path", help="Directory path for output (uses auto-generated filename)")
     parser.add_argument("--debug", help="Include prompts in output file (Y/N)", default="N")
     args = parser.parse_args()
     
@@ -46,9 +48,15 @@ def main():
     # Determine input type
     input_type = determine_input_type(args.input)
     
-    # Generate default output filename if not provided
-    output_file = args.output
-    if not output_file:
+    # Handle output file path
+    if args.output_path:
+        # Use specified directory with auto-generated filename
+        output_file = os.path.join(args.output_path, generate_default_output_filename(args.input, config["MODEL"]))
+    elif args.output:
+        # Use specified full output path
+        output_file = args.output
+    else:
+        # Default behavior - auto-generated filename in current directory
         output_file = generate_default_output_filename(args.input, config["MODEL"])
     
     # Process the input file based on its type

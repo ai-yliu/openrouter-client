@@ -36,7 +36,12 @@ pip install requests PyPDF2
 ### Command Line Interface
 
 ```bash
-python -m openrouter.openrouter_client --input <input_file> --config <config_file> [--output <output_file>]
+python -m openrouter.openrouter_client \\
+  --input <input_file> \\
+  --config <config_file> \\
+  [--output <output_file>] \\
+  [--output-path <output_directory>] \\
+  [--debug Y/N]
 ```
 
 ### Programmatic Usage
@@ -71,7 +76,11 @@ See `example_usage.py` for a complete example.
 
 - `--input`: Path to the input file (image, PDF, or text) or a URL to an image/PDF
 - `--config`: Path to the configuration file
-- `--output`: (Optional) Path to the output file. If not provided, a default name will be generated based on the model name and input filename
+- `--output`: (Optional) Full path to the output file including filename (mutually exclusive with --output-path)
+- `--output-path`: (Optional) Directory path where output file should be saved (uses auto-generated filename, mutually exclusive with --output)
+- `--debug`: (Optional) Include prompts in output file (Y/N, default: N)
+
+Note: Only one of --output or --output-path may be used at a time
 
 ### Examples
 
