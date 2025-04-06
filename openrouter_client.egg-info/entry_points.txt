@@ -1,2 +1,3 @@
 [console_scripts]
-openrouter-client = openrouter.openrouter_client:main
+compare-json = json_comparator:main
+openrouter = openrouter_client:main

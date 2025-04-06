@@ -30,8 +30,9 @@ setup(
         ],
     },
     entry_points={
-        "console_scripts": [
-            "openrouter=openrouter_client:main",
+        'console_scripts': [
+            'openrouter=openrouter_client:main',
+            'compare-json=json_comparator:main',
         ],
     },
 )
