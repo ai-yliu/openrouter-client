@@ -33,6 +33,7 @@ setup(
         'console_scripts': [
             'openrouter=openrouter_client:main',
             'compare-json=json_comparator:main',
+            'compare-llms=compare_llms:main',
         ],
     },
 )
