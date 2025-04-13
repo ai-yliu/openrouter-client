@@ -111,7 +111,7 @@ python -m openrouter.openrouter_client --input /path/to/image.jpg --config confi
 
 ## LLM Comparison Tool (`compare-llms`)
 
-This tool orchestrates a workflow to compare the Named Entity Recognition (NER) results from two different LLMs on text extracted from an input image or PDF file. It utilizes the `openrouter-client` for text extraction (using a VLM) and NER processing, and the `compare-json` tool for the final comparison.
+This tool orchestrates a workflow to compare the Named Entity Recognition (NER) results from two different LLMs on text extracted from an input image or PDF file. It utilizes the `openrouter-client` for text extraction (using a VLM) and NER processing, and the `compare-json` tool for the final comparison. It also logs the progress and details of each job and its steps to a configured PostgreSQL database.
 
 ### Command Line Usage
 
@@ -154,6 +154,14 @@ compare-llms \\
   --ner-config1 config_ner1.ini \\
   --ner-config2 config_ner2.ini \\
   --temp-dir /path/to/custom/temp
+
+# Enable database logging (assuming db_config.ini exists)
+compare-llms \\
+  --input document.pdf \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini \\
+  --db-config db_config.ini
 ```
 
 ### Arguments
@@ -166,6 +174,7 @@ compare-llms \\
 *   `--output-path` (Optional): Directory path where the final JSON comparison result file should be saved (uses an auto-generated filename like `<input_basename>_comparison.json`). Mutually exclusive with `--output`.
 *   `--temp-dir` (Optional): Directory path to store intermediate files (VLM output, NER outputs). If not provided, uses the system's default temporary directory.
 *   `--debug` (Optional): If this flag is present, intermediate temporary files will *not* be deleted after the workflow completes.
+*   `--db-config` (Optional): Path to the database configuration file (default: `db_config.ini`). If provided and valid, the tool will log job and task details to the specified PostgreSQL database. See `db_config.ini.template` for the required format.
 
 ### Workflow
 

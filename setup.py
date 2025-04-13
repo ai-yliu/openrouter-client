@@ -22,6 +22,7 @@ setup(
     install_requires=[
         "requests>=2.25.1",
         "PyPDF2>=2.0.0",
+        "psycopg2-binary>=2.9", # Added for PostgreSQL logging
     ],
     extras_require={
         "dev": [
