@@ -81,13 +81,29 @@ def compare_json_files(
         
         result = compare_json_data(data1, data2)
         
-        if output_file or output_path:
-            output_path = output_path or os.path.dirname(file1)
-            output_file = output_file or generate_output_filename(file1, file2)
-            os.makedirs(output_path, exist_ok=True)
-            with open(os.path.join(output_path, output_file), 'w') as f:
+        # Determine the final path and ensure directory exists
+        final_write_path = None
+        if output_file: # --output argument (full path) provided
+            final_write_path = output_file
+            output_dir_to_create = os.path.dirname(final_write_path)
+        elif output_path: # --output-dir argument provided
+            default_filename = generate_output_filename(file1, file2)
+            final_write_path = os.path.join(output_path, default_filename)
+            output_dir_to_create = output_path
+        # If neither --output nor --output-dir is given, final_write_path remains None, and we don't write to file
+
+        # Write file if a path was determined
+        if final_write_path:
+            # Ensure the target directory exists
+            if output_dir_to_create and not os.path.exists(output_dir_to_create):
+                 try:
+                     os.makedirs(output_dir_to_create, exist_ok=True)
+                 except OSError as e:
+                     raise ValueError(f"Could not create output directory '{output_dir_to_create}'. {e}")
+
+            # Write the comparison result
+            with open(final_write_path, 'w') as f:
                 json.dump(result, f, indent=2)
-        
         return result
         
     except Exception as e:

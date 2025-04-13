@@ -109,6 +109,72 @@ Specify an output file:
 python -m openrouter.openrouter_client --input /path/to/image.jpg --config config.ini --output results.txt
 ```
 
+## LLM Comparison Tool (`compare-llms`)
+
+This tool orchestrates a workflow to compare the Named Entity Recognition (NER) results from two different LLMs on text extracted from an input image or PDF file. It utilizes the `openrouter-client` for text extraction (using a VLM) and NER processing, and the `compare-json` tool for the final comparison.
+
+### Command Line Usage
+
+```bash
+# Basic usage with required arguments
+compare-llms \\
+  --input document.pdf \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini
+
+# Specify final output file path
+compare-llms \\
+  --input image.png \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini \\
+  --output /path/to/results/comparison_result.json
+
+# Specify output directory (uses default filename like <input_basename>_comparison.json)
+compare-llms \\
+  --input document.pdf \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini \\
+  --output-path ./comparison_outputs
+
+# Keep temporary files for debugging
+compare-llms \\
+  --input document.pdf \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini \\
+  --debug
+
+# Use a specific temporary directory
+compare-llms \\
+  --input document.pdf \\
+  --vlm-config config_vlm.ini \\
+  --ner-config1 config_ner1.ini \\
+  --ner-config2 config_ner2.ini \\
+  --temp-dir /path/to/custom/temp
+```
+
+### Arguments
+
+*   `--input` (Required): Path or URL to the input image or PDF file.
+*   `--vlm-config` (Required): Path to the configuration file for the VLM text extraction step.
+*   `--ner-config1` (Required): Path to the configuration file for the first NER LLM. Ensure this config specifies JSON output format.
+*   `--ner-config2` (Required): Path to the configuration file for the second NER LLM. Ensure this config specifies JSON output format.
+*   `--output` (Optional): Full path (directory + filename) for the final JSON comparison result file. Mutually exclusive with `--output-path`.
+*   `--output-path` (Optional): Directory path where the final JSON comparison result file should be saved (uses an auto-generated filename like `<input_basename>_comparison.json`). Mutually exclusive with `--output`.
+*   `--temp-dir` (Optional): Directory path to store intermediate files (VLM output, NER outputs). If not provided, uses the system's default temporary directory.
+*   `--debug` (Optional): If this flag is present, intermediate temporary files will *not* be deleted after the workflow completes.
+
+### Workflow
+
+1.  Extracts text from the input image/PDF using the VLM specified in `--vlm-config`.
+2.  Runs NER on the extracted text using the first LLM specified in `--ner-config1`.
+3.  Runs NER on the extracted text using the second LLM specified in `--ner-config2`.
+4.  Compares the JSON outputs from the two NER runs using the `compare-json` logic.
+5.  Saves the final comparison result.
+
 ## JSON Comparison Tool Usage
 
 The package includes a tool to compare JSON outputs from different LLM runs:
