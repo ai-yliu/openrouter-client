@@ -96,7 +96,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments & Credentials
-.env
+.env # General environment variables
 .venv
 env/
 venv/

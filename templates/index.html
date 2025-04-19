@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TBML - Name Screening</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="header">
+        <img src="/static/ocbc_logo.png" alt="OCBC Logo" id="header-logo">
+        <h1>TBML - Name Screening</h1>
+    </div>
+
+    <div class="container">
+        <!-- Left Panel: File Display -->
+        <div class="panel left-panel">
+            <div class="panel-header">
+                <h2>Input Document</h2>
+                <div class="zoom-controls">
+                    <button id="zoom-out-button" title="Zoom Out">-</button>
+                    <button id="zoom-in-button" title="Zoom In">+</button>
+                    <span id="zoom-level-display">100%</span> <!-- Optional: Display current zoom -->
+                </div>
+            </div>
+            <div id="file-display-area">
+                <!-- Image or PDF will be displayed here -->
+                <p>Upload an image or PDF file.</p>
+            </div>
+            <div class="controls">
+                <input type="file" id="file-input" accept="image/*,.pdf">
+                <button id="upload-button">Upload</button>
+                <button id="prev-button" disabled>Prev</button>
+                <button id="next-button" disabled>Next</button>
+                <button id="clear-button">Clear</button>
+            </div>
+        </div>
+
+        <!-- Right Panel: Output Display -->
+        <div class="panel right-panel">
+            <h2>Output</h2>
+            <!-- Output controls will be moved below -->
+            <div id="output-display-area">
+                <!-- Raw text or NER results will be displayed here -->
+                <pre id="raw-text-output"></pre>
+                <div id="ner1-output" class="hidden">
+                    <h3>NER 1 Results</h3>
+                    <table id="ner1-table">
+                        <thead><tr><th>Category</th><th>Value</th><th>Confidence</th></tr></thead>
+                        <tbody><!-- NER 1 data rows --></tbody>
+                    </table>
+                </div>
+                 <div id="ner2-output" class="hidden">
+                    <h3>NER 2 Results</h3>
+                    <table id="ner2-table">
+                         <thead><tr><th>Category</th><th>Value</th><th>Confidence</th></tr></thead>
+                         <tbody><!-- NER 2 data rows --></tbody>
+                    </table>
+                </div>
+            </div>
+             <div id="status-area">
+                <p>Status: Idle</p>
+                <!-- Progress updates will appear here -->
+            </div>
+            <!-- Output Controls Moved Here -->
+            <div class="output-controls">
+                <button id="raw-button" class="output-toggle active">RAW</button>
+                <button id="ner1-button" class="output-toggle">NER 1</button>
+                <button id="ner2-button" class="output-toggle">NER 2</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

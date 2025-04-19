@@ -7,6 +7,7 @@ Functions for interacting with the OpenRouter API.
 import requests
 import base64
 import json
+import sys # Import the sys module
 # Handle both package import and direct script execution
 try:
     from openrouter.utils import extract_text_from_pdf
@@ -100,8 +101,8 @@ def process_text(text_file, config):
             "temperature": float(config.get("TEMPERATURE", 0.7)),
             "top_p": float(config.get("TOP_P", 1.0)),
             "stream": config.get("STREAM", "false").lower() == "true",
-            "response_format": json.loads(config["RESPONSE_FORMAT"]) if isinstance(config["RESPONSE_FORMAT"], str) and config["RESPONSE_FORMAT"].startswith('{') else {"type": "text"},
-            "provider": json.loads(config["PROVIDER"]) if isinstance(config["PROVIDER"], str) and config["PROVIDER"].startswith('{') else {"data_collection": "deny"}
+            "response_format": _parse_json_config_value(config.get("RESPONSE_FORMAT"), default={"type": "text"}),
+            "provider": _parse_json_config_value(config.get("PROVIDER"), default={"data_collection": "deny"}),
         }
     )
 
@@ -141,8 +142,8 @@ def process_pdf(pdf_path, config):
             "temperature": float(config.get("TEMPERATURE", 0.7)),
             "top_p": float(config.get("TOP_P", 1.0)),
             "stream": config.get("STREAM", "false").lower() == "true",
-            "provider": json.loads(config["PROVIDER"]) if isinstance(config["PROVIDER"], str) and config["PROVIDER"].startswith('{') else {"data_collection": "deny"},
-            "response_format": json.loads(config["RESPONSE_FORMAT"]) if isinstance(config["RESPONSE_FORMAT"], str) and config["RESPONSE_FORMAT"].startswith('{') else {"type": "text"}
+            "provider": _parse_json_config_value(config.get("PROVIDER"), default={"data_collection": "deny"}),
+            "response_format": _parse_json_config_value(config.get("RESPONSE_FORMAT"), default={"type": "text"})
         }
     )
 
@@ -198,7 +199,29 @@ def process_image(image_path, config):
             "temperature": float(config.get("TEMPERATURE", 0.7)),
             "top_p": float(config.get("TOP_P", 1.0)),
             "stream": config.get("STREAM", "false").lower() == "true",
-            "provider": json.loads(config["PROVIDER"]) if isinstance(config["PROVIDER"], str) and config["PROVIDER"].startswith('{') else {"data_collection": "deny"},
-            "response_format": json.loads(config["RESPONSE_FORMAT"]) if isinstance(config["RESPONSE_FORMAT"], str) and config["RESPONSE_FORMAT"].startswith('{') else {"type": "text"}
+            "provider": _parse_json_config_value(config.get("PROVIDER"), default={"data_collection": "deny"}),
+            "response_format": _parse_json_config_value(config.get("RESPONSE_FORMAT"), default={"type": "text"})
         }
     )
+
+# Helper function to safely parse JSON values from config
+def _parse_json_config_value(value_str, default=None):
+    """
+    Safely parses a JSON string read from config (potentially multi-line),
+    returning default on error. Attempts to clean up line continuation chars.
+    """
+    if not value_str:
+        return default
+    try:
+        # Clean up potential multi-line artifacts from load_config:
+        # 1. Remove backslash-newline combinations used for line continuation.
+        # 2. Remove any remaining standalone newline characters within the string.
+        cleaned_value_str = value_str.replace('\\\n', '').replace('\n', '')
+        # Now attempt to parse the cleaned string as JSON
+        return json.loads(cleaned_value_str)
+    except json.JSONDecodeError as e:
+        print(f"Warning: Could not parse config value as JSON: '{value_str[:100]}...'. Error: {e}. Using default: {default}", file=sys.stderr)
+        return default
+    except Exception as e: # Catch other potential errors during cleaning/parsing
+        print(f"Warning: Unexpected error parsing config value: '{value_str[:100]}...'. Error: {e}. Using default: {default}", file=sys.stderr)
+        return default

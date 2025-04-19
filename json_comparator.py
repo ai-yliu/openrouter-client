@@ -108,7 +108,32 @@ def compare_json_files(
         
     except Exception as e:
         raise ValueError(f"Comparison failed: {str(e)}")
+def run_json_comparison(file1_path, file2_path):
+    """
+    Compares two JSON files and returns the comparison result dictionary.
 
+    Args:
+        file1_path (str): Path to the first JSON file.
+        file2_path (str): Path to the second JSON file.
+
+    Returns:
+        dict: A dictionary containing the comparison results.
+
+    Raises:
+        ValueError: If file loading or comparison fails.
+    """
+    try:
+        data1 = load_json_file(file1_path)
+        data2 = load_json_file(file2_path)
+        result = compare_json_data(data1, data2)
+        return result
+    except Exception as e:
+        # Re-raise exceptions to be handled by the caller
+        raise ValueError(f"Comparison failed for {file1_path} and {file2_path}: {str(e)}")
+
+
+def main():
+    """CLI entry point for JSON comparison"""
 def main():
     """CLI entry point for JSON comparison"""
     import argparse
@@ -124,12 +149,36 @@ def main():
     args = parser.parse_args()
     
     try:
-        result = compare_json_files(
-            args.file1,
-            args.file2,
-            output_path=args.output_dir,
-            output_file=args.output
-        )
+        # Call the core comparison logic first
+        result = run_json_comparison(args.file1, args.file2)
+
+        # Handle file output based on CLI arguments
+        output_file_cli = args.output
+        output_dir_cli = args.output_dir
+        final_write_path = None
+
+        if output_file_cli: # --output argument (full path) provided
+            final_write_path = output_file_cli
+            output_dir_to_create = os.path.dirname(final_write_path)
+        elif output_dir_cli: # --output-dir argument provided
+            default_filename = generate_output_filename(args.file1, args.file2)
+            final_write_path = os.path.join(output_dir_cli, default_filename)
+            output_dir_to_create = output_dir_cli
+
+        # Write file if a path was determined
+        if final_write_path:
+            # Ensure the target directory exists
+            if output_dir_to_create and not os.path.exists(output_dir_to_create):
+                 try:
+                     os.makedirs(output_dir_to_create, exist_ok=True)
+                 except OSError as e:
+                     raise ValueError(f"Could not create output directory '{output_dir_to_create}'. {e}") # Re-raise
+
+            # Write the comparison result
+            with open(final_write_path, 'w') as f:
+                json.dump(result, f, indent=2)
+            print(f"Comparison results saved to: {final_write_path}")
+
         print("Comparison successful. Results:")
         print(json.dumps(result, indent=2))
     except ValueError as e:

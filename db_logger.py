@@ -369,13 +369,23 @@ def update_task_details_output(conn, task_id, task_type, output_data, api_respon
                     api_response_id = %s
                 WHERE task_id = %s;
             """
-            # Convert output dict/list to JSON string for JSONB column
-            output_json_str = None
-            if isinstance(output_data.get('output_json'), (dict, list)):
-                 output_json_str = json.dumps(output_data['output_json'])
+            # Convert the output_json dictionary to a JSON string for the JSONB column
+            output_json_for_db = None
+            output_json_value = output_data.get('output_json')
+            if isinstance(output_json_value, (dict, list)):
+                 try:
+                     output_json_for_db = json.dumps(output_json_value)
+                 except TypeError as e:
+                     print(f"Error serializing NER output to JSON for task {task_id}: {e}", file=sys.stderr)
+                     # Decide how to handle - log None? Raise error?
+                     # For now, log None if serialization fails
+            elif isinstance(output_json_value, str):
+                 # If it's already a string, assume it's valid JSON (or log warning)
+                 output_json_for_db = output_json_value
+
 
             data = (
-                output_json_str,
+                output_json_for_db, # Pass the JSON string
                 api_response_id,
                 task_id
             )
@@ -385,13 +395,20 @@ def update_task_details_output(conn, task_id, task_type, output_data, api_respon
                 SET output_comparison_json = %s
                 WHERE task_id = %s;
             """
-             # Convert output dict/list to JSON string for JSONB column
-            output_json_str = None
-            if isinstance(output_data.get('output_comparison_json'), (dict, list)):
-                 output_json_str = json.dumps(output_data['output_comparison_json'])
+             # Convert the output_comparison_json dictionary to a JSON string
+            output_comparison_json_for_db = None
+            output_comparison_value = output_data.get('output_comparison_json')
+            if isinstance(output_comparison_value, (dict, list)):
+                 try:
+                     output_comparison_json_for_db = json.dumps(output_comparison_value)
+                 except TypeError as e:
+                     print(f"Error serializing Comparison output to JSON for task {task_id}: {e}", file=sys.stderr)
+                     # Log None if serialization fails
+            elif isinstance(output_comparison_value, str):
+                 output_comparison_json_for_db = output_comparison_value
 
             data = (
-                output_json_str,
+                output_comparison_json_for_db, # Pass the JSON string
                 task_id
             )
         else:
@@ -400,6 +417,10 @@ def update_task_details_output(conn, task_id, task_type, output_data, api_respon
 
         # Execute the update
         if sql_query and data:
+            print(f"DEBUG DB: Attempting update for task {task_id} ({task_type})")
+            print(f"DEBUG DB: SQL Query: {sql_query}")
+            print(f"DEBUG DB: Data Tuple Types: {[type(d) for d in data]}")
+            print(f"DEBUG DB: Data Tuple Values: {data}")
             with conn.cursor() as cur:
                 cur.execute(sql_query, data)
                 conn.commit()
@@ -408,6 +429,191 @@ def update_task_details_output(conn, task_id, task_type, output_data, api_respon
     except (Exception, psycopg2.DatabaseError) as error:
         print(f"Error updating output details for task {task_id} ({task_type}): {error}", file=sys.stderr)
         conn.rollback()
+
+# --- Data Retrieval Functions ---
+
+def get_task_id_by_order(conn, job_id, task_order):
+    """
+    Retrieves the task_id for a specific task within a job based on its order.
+
+    Args:
+        conn: Database connection object.
+        job_id (str): UUID of the parent job.
+        task_order (int): The sequence number of the task.
+
+    Returns:
+        str: The UUID of the task, or None if not found or error occurs.
+    """
+    task_id = None
+    sql_query = "SELECT task_id FROM tasks WHERE job_id = %s AND task_order = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (job_id, task_order))
+            result = cur.fetchone()
+            if result:
+                task_id = result[0]
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving task_id for job {job_id}, order {task_order}: {error}", file=sys.stderr)
+        # conn.rollback() # Not needed for SELECT typically
+    return task_id
+
+def get_job_status(conn, job_id):
+    """
+    Retrieves the current status and other details for a specific job.
+
+    Args:
+        conn: Database connection object.
+        job_id (str): UUID of the job.
+
+    Returns:
+        dict: A dictionary containing job details (status, start_time, end_time, error_message),
+              or None if not found or error occurs.
+    """
+    job_details = None
+    # Cast status enum to text for easier JSON serialization if needed later
+    sql_query = """
+        SELECT status::text, start_time, end_time, error_message, input_source, workflow_name
+        FROM jobs
+        WHERE job_id = %s;
+        """
+    try:
+        # Use DictCursor to get results as dictionaries
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(sql_query, (job_id,))
+            result = cur.fetchone()
+            if result:
+                job_details = dict(result) # Convert Row object to dict
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving status for job {job_id}: {error}", file=sys.stderr)
+    return job_details
+
+
+def get_tasks_for_job(conn, job_id):
+    """
+    Retrieves summary details (id, order, type, status) for all tasks associated with a job.
+
+    Args:
+        conn: Database connection object.
+        job_id (str): UUID of the parent job.
+
+    Returns:
+        list: A list of dictionaries, each containing details for a task, ordered by task_order.
+              Returns empty list if no tasks found or error occurs.
+    """
+    tasks = []
+    # Cast status and type enums to text
+    sql_query = """
+        SELECT task_id, task_order, task_type::text, status::text, start_time, end_time, error_message
+        FROM tasks
+        WHERE job_id = %s
+        ORDER BY task_order;
+        """
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(sql_query, (job_id,))
+            results = cur.fetchall()
+            tasks = [dict(row) for row in results] # Convert list of Row objects to list of dicts
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving tasks for job {job_id}: {error}", file=sys.stderr)
+    return tasks
+
+# Need to import DictCursor
+from psycopg2.extras import DictCursor
+
+def get_vlm_input_content(conn, task_id):
+    """
+    Retrieves the input content and type for a VLM task.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the VLM task.
+
+    Returns:
+        tuple: (input_content_type, input_content) or (None, None) if not found/error.
+    """
+    content_type = None
+    content = None
+    sql_query = "SELECT input_content_type::text, input_content FROM task_details_vlm WHERE task_id = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (task_id,))
+            result = cur.fetchone()
+            if result:
+                content_type = result[0]
+                content = result[1]
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving VLM input content for task {task_id}: {error}", file=sys.stderr)
+    return content_type, content
+
+def get_vlm_output(conn, task_id):
+    """
+    Retrieves the output_text for a VLM extraction task.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the VLM task.
+
+    Returns:
+        str: The extracted raw text, or None if not found or error occurs.
+    """
+    output_text = None
+    sql_query = "SELECT output_text FROM task_details_vlm WHERE task_id = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (task_id,))
+            result = cur.fetchone()
+            if result:
+                output_text = result[0]
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving VLM output for task {task_id}: {error}", file=sys.stderr)
+    return output_text
+
+def get_ner_output(conn, task_id):
+    """
+    Retrieves the output_json for a NER processing task.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the NER task.
+
+    Returns:
+        dict: The NER output JSON, or None if not found or error occurs.
+    """
+    output_json = None
+    sql_query = "SELECT output_json FROM task_details_ner WHERE task_id = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (task_id,))
+            result = cur.fetchone()
+            if result and result[0]:
+                output_json = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving NER output for task {task_id}: {error}", file=sys.stderr)
+    return output_json
+
+def get_comparison_output(conn, task_id):
+    """
+    Retrieves the output_comparison_json for a JSON comparison task.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the comparison task.
+
+    Returns:
+        dict: The comparison output JSON, or None if not found or error occurs.
+    """
+    output_json = None
+    sql_query = "SELECT output_comparison_json FROM task_details_comparison WHERE task_id = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (task_id,))
+            result = cur.fetchone()
+            if result and result[0]:
+                output_json = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving comparison output for task {task_id}: {error}", file=sys.stderr)
+    return output_json
+
 
 # Example usage (for testing purposes, can be removed later)
 if __name__ == '__main__':
