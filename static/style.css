@@ -1,0 +1,171 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+}
+
+h1, h2, h3 {
+    color: #333;
+    margin: 0; /* Remove default margin for alignment */
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between; /* Pushes title left, controls right */
+    align-items: center;
+    margin-bottom: 10px; /* Space below header */
+    border-bottom: 1px solid #eee; /* Optional separator */
+    padding-bottom: 5px; /* Optional separator */
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.zoom-controls button {
+    font-weight: bold;
+    padding: 2px 8px; /* Smaller padding for zoom buttons */
+    min-width: 25px; /* Ensure buttons have some width */
+}
+
+#zoom-level-display {
+    font-size: 0.9em;
+    color: #555;
+    min-width: 40px; /* Space for percentage */
+    text-align: right;
+}
+
+.header {
+    display: flex;
+    align-items: center; /* Vertically align items in the center */
+    gap: 15px; /* Space between logo and title */
+    margin-bottom: 20px; /* Space below the header */
+}
+
+#header-logo {
+    height: 40px; /* Adjust height as needed */
+    width: auto; /* Maintain aspect ratio */
+}
+
+.container {
+    display: flex;
+    gap: 20px;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 80vh; /* Set a fixed viewport height for the container */
+    /* Or use max-height: 80vh; */
+}
+
+.panel {
+    flex: 1; /* Each panel takes equal space */
+    border: 1px solid #ccc;
+    padding: 15px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column; /* Stack elements vertically */
+    overflow: hidden; /* Prevent panel itself from scrolling */
+}
+
+.left-panel {
+    background-color: #e9e9e9;
+}
+
+.right-panel {
+    background-color: #f0f0f0;
+}
+
+#file-display-area {
+    border: 1px dashed #aaa;
+    min-height: 300px; /* Adjust as needed */
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #fff;
+    overflow: auto; /* Allow BOTH horizontal and vertical scrolling */
+    flex-grow: 1; /* Allow display area to grow */
+    /* Remove flex centering to show top-left of large content */
+}
+
+#file-display-area img {
+    /* Remove constraints to show image at actual size */
+    /* max-width: 100%; */
+    /* max-height: 100%; */
+    /* object-fit: contain; */
+    /* Ensure image behaves like a block for scrolling */
+    display: block;
+}
+
+#output-display-area {
+    border: 1px solid #bbb;
+    background-color: #fff;
+    padding: 10px;
+    margin-top: 10px;
+    font-family: monospace;
+    white-space: pre-wrap; /* Wrap long lines in raw text */
+    overflow-y: auto; /* Allow vertical scrolling specifically */
+    flex-grow: 1; /* Allow display area to grow */
+    /* Ensure child divs don't prevent scrolling */
+    display: block; /* Or adjust based on content */
+}
+
+.controls, .output-controls {
+    margin-top: auto; /* Push controls to the bottom */
+    padding-top: 10px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap; /* Allow buttons to wrap */
+}
+
+button {
+    padding: 8px 15px;
+    cursor: pointer;
+    border: 1px solid #888;
+    border-radius: 4px;
+    background-color: #ddd;
+}
+
+button:hover {
+    background-color: #ccc;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.output-toggle.active {
+    background-color: #a0a0a0;
+    font-weight: bold;
+    border-color: #555;
+}
+
+.hidden {
+    display: none;
+}
+
+#status-area {
+    margin-top: 15px;
+    padding: 10px;
+    border-top: 1px solid #ccc;
+    font-style: italic;
+    color: #555;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #e2e2e2;
+}

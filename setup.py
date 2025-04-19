@@ -23,6 +23,8 @@ setup(
         "requests>=2.25.1",
         "PyPDF2>=2.0.0",
         "psycopg2-binary>=2.9", # Added for PostgreSQL logging
+        "Flask>=2.0",          # Added for Web GUI
+        "python-dotenv>=0.19", # Added for loading .env files
     ],
     extras_require={
         "dev": [
