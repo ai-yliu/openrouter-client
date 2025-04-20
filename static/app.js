@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomInButton = document.getElementById('zoom-in-button');
     const zoomOutButton = document.getElementById('zoom-out-button');
     const zoomLevelDisplay = document.getElementById('zoom-level-display');
+    const compareButton = document.getElementById('compare-button'); // Added
+    const comparisonOutputDiv = document.getElementById('comparison-output'); // Added
+    const comparisonTableBody = document.querySelector('#comparison-table tbody'); // Added
 
     // --- State ---
     let currentJobId = null;
@@ -32,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let ner2Loaded = false;
     let ner1Data = null;
     let ner2Data = null;
+    let comparisonData = null; // Added
+    let comparisonLoaded = false; // Added
     let currentZoomLevel = 1.0; // Start at 100%
 
     // --- Functions ---
@@ -46,8 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
         rawTextOutput.textContent = '';
         ner1TableBody.innerHTML = '';
         ner2TableBody.innerHTML = '';
+        comparisonTableBody.innerHTML = ''; // Added
         ner1OutputDiv.classList.add('hidden');
         ner2OutputDiv.classList.add('hidden');
+        comparisonOutputDiv.classList.add('hidden'); // Added
         rawTextOutput.classList.remove('hidden'); // Show raw by default
         setActiveOutputButton(rawButton);
         updateStatus('Idle');
@@ -58,8 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
         rawTextLoaded = false;
         ner1Loaded = false;
         ner2Loaded = false;
+        comparisonLoaded = false; // Added
         ner1Data = null;
         ner2Data = null;
+        comparisonData = null; // Added
         fileInput.value = ''; // Clear file input
         if (pollingInterval) {
             clearInterval(pollingInterval);
@@ -71,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setActiveOutputButton(activeButton) {
-        [rawButton, ner1Button, ner2Button].forEach(button => {
+        [rawButton, ner1Button, ner2Button, compareButton].forEach(button => { // Added compareButton
             button.classList.remove('active');
         });
         activeButton.classList.add('active');
@@ -291,37 +300,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderNERTable(tableBody, nerApiResponse) {
+        // nerApiResponse is the full API response object stored in the DB
         tableBody.innerHTML = ''; // Clear previous rows
         let entities = null;
 
-        // --- Safely extract the entities array ---
+        // --- Safely extract the entities array from the API response structure ---
         try {
-            // Check if the API response itself is the content (less likely now)
-            if (nerApiResponse && nerApiResponse.entities && Array.isArray(nerApiResponse.entities)) {
-                 entities = nerApiResponse.entities;
-            }
-            // Check standard structure: choices -> message -> content -> entities
-            else if (nerApiResponse && nerApiResponse.choices && nerApiResponse.choices[0] &&
-                     nerApiResponse.choices[0].message && nerApiResponse.choices[0].message.content) {
+            let content = nerApiResponse?.choices?.[0]?.message?.content; // Safely access nested properties
 
-                let content = nerApiResponse.choices[0].message.content;
-                // Check if content is a string needing parsing
+            if (content) {
+                // Check if content is a string needing parsing (as expected from API)
                 if (typeof content === 'string') {
                     try {
                         content = JSON.parse(content);
                     } catch (e) {
                         console.error("Failed to parse NER content string:", e);
-                        tableBody.innerHTML = `<tr><td colspan="3">Error: Could not parse NER content.</td></tr>`;
+                        tableBody.innerHTML = `<tr><td colspan="3">Error: Could not parse NER content string.</td></tr>`;
                         return;
                     }
                 }
-                // Now check for entities within the parsed content
+                // Now check for the 'entities' array within the parsed content object
                 if (content && content.entities && Array.isArray(content.entities)) {
                     entities = content.entities;
+                } else {
+                     console.warn("Parsed NER content does not contain an 'entities' array:", content);
                 }
+            } else {
+                 console.warn("Could not find 'content' in NER API response structure:", nerApiResponse);
             }
         } catch (e) {
-            console.error("Error accessing entities in NER response:", e);
+            console.error("Error processing NER API response structure:", e);
             tableBody.innerHTML = `<tr><td colspan="3">Error processing NER response structure.</td></tr>`;
             return;
         }
@@ -344,6 +352,79 @@ document.addEventListener('DOMContentLoaded', () => {
         }
          else { // Entities array not found in response structure
             tableBody.innerHTML = '<tr><td colspan="3">Could not find entities in the response.</td></tr>';
+        }
+    }
+
+    async function fetchComparisonResults(jobId) {
+        if (!jobId) return;
+        updateStatus('Fetching comparison results...');
+        try {
+            // Assuming Option B (pre-computed result stored in DB)
+            // Need the comparison task ID first
+            const comparisonTaskId = taskIds.comparison; // Get from polling
+            if (!comparisonTaskId) {
+                 // Maybe the comparison task hasn't been created yet or polling missed it
+                 // We could try fetching based on job_id directly if API supports it
+                 // Or just wait for next poll cycle. For now, show message.
+                 updateStatus('Waiting for comparison task to complete...');
+                 // Alternatively, call the API endpoint that computes on demand if using Option A
+                 // const response = await fetch(`/api/v1/jobs/${jobId}/comparison`);
+                 return; // Exit for now, rely on polling to eventually fetch
+            }
+
+            const response = await fetch(`/api/v1/tasks/${comparisonTaskId}/output`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+
+            if (data.output_comparison_json) {
+                comparisonData = data.output_comparison_json; // Store the result
+                renderComparisonTable(comparisonTableBody, comparisonData);
+                comparisonLoaded = true;
+                updateStatus('Comparison results loaded.');
+            } else {
+                comparisonTableBody.innerHTML = '<tr><td colspan="4">No comparison data available.</td></tr>';
+                updateStatus('No comparison data found.');
+            }
+        } catch (error) {
+            console.error("Error fetching comparison results:", error);
+            comparisonTableBody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
+            updateStatus(`Error fetching comparison: ${error.message}`, true);
+        }
+    }
+
+    function renderComparisonTable(tableBody, comparisonResult) {
+        tableBody.innerHTML = ''; // Clear previous rows
+        let entities = null;
+        try {
+             // Comparison result structure is expected to be {"entities": [...]}
+             if (comparisonResult && comparisonResult.entities && Array.isArray(comparisonResult.entities)) {
+                 entities = comparisonResult.entities;
+             }
+        } catch(e) {
+             console.error("Error accessing entities in comparison result:", e);
+             tableBody.innerHTML = `<tr><td colspan="4">Error processing comparison result structure.</td></tr>`;
+             return;
+        }
+
+        if (entities && entities.length > 0) {
+            entities.forEach(entity => {
+                const name = entity.entity_name || '[N/A]';
+                const value = entity.entity_value || '[N/A]';
+                const comparison = entity.comparison || '[N/A]';
+                const confidence = entity.confidence !== undefined ? entity.confidence : '[N/A]';
+
+                tableBody.innerHTML += `<tr>
+                    <td>${escapeHtml(name)}</td>
+                    <td>${escapeHtml(value)}</td>
+                    <td>${escapeHtml(comparison)}</td>
+                    <td>${escapeHtml(String(confidence))}</td>
+                </tr>`;
+            });
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="4">No comparison results found.</td></tr>';
         }
     }
 
@@ -387,6 +468,37 @@ document.addEventListener('DOMContentLoaded', () => {
         ner2OutputDiv.classList.remove('hidden');
         updateStatus('Displaying NER 2 Results');
         if (taskIds.ner2 && !ner2Loaded) fetchNER2(taskIds.ner2);
+    });
+
+    compareButton.addEventListener('click', () => { // Added listener for Compare button
+        setActiveOutputButton(compareButton);
+        rawTextOutput.classList.add('hidden');
+        ner1OutputDiv.classList.add('hidden');
+        ner2OutputDiv.classList.add('hidden');
+        comparisonOutputDiv.classList.remove('hidden'); // Show comparison table
+        updateStatus('Displaying Comparison Results');
+        // Fetch comparison results if not already loaded and job is done/comparison task exists
+        if (currentJobId && !comparisonLoaded && taskIds.comparison) {
+             fetchComparisonResults(currentJobId); // Pass job ID, fetch function will get task ID
+        } else if (!taskIds.comparison) {
+            updateStatus('Comparison task not yet available or completed.');
+        }
+        if (taskIds.ner2 && !ner2Loaded) fetchNER2(taskIds.ner2);
+    });
+
+    compareButton.addEventListener('click', () => { // Added listener for Compare button
+        setActiveOutputButton(compareButton);
+        rawTextOutput.classList.add('hidden');
+        ner1OutputDiv.classList.add('hidden');
+        ner2OutputDiv.classList.add('hidden');
+        comparisonOutputDiv.classList.remove('hidden'); // Show comparison table
+        updateStatus('Displaying Comparison Results');
+        // Fetch comparison results if not already loaded and job is done/comparison task exists
+        if (currentJobId && !comparisonLoaded && taskIds.comparison) {
+             fetchComparisonResults(currentJobId); // Pass job ID, fetch function will get task ID
+        } else if (!taskIds.comparison) {
+            updateStatus('Comparison task not yet available or completed.');
+        }
     });
 
     function applyZoom() {

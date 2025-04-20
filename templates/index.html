@@ -44,17 +44,24 @@
                 <!-- Raw text or NER results will be displayed here -->
                 <pre id="raw-text-output"></pre>
                 <div id="ner1-output" class="hidden">
-                    <h3>NER 1 Results</h3>
+                    <!-- Removed <h3>NER 1 Results</h3> -->
                     <table id="ner1-table">
-                        <thead><tr><th>Category</th><th>Value</th><th>Confidence</th></tr></thead>
+                        <thead><tr><th>Entity Name</th><th>Entity Value</th><th>Confidence</th></tr></thead>
                         <tbody><!-- NER 1 data rows --></tbody>
                     </table>
                 </div>
                  <div id="ner2-output" class="hidden">
-                    <h3>NER 2 Results</h3>
+                    <!-- Removed <h3>NER 2 Results</h3> -->
                     <table id="ner2-table">
-                         <thead><tr><th>Category</th><th>Value</th><th>Confidence</th></tr></thead>
+                         <thead><tr><th>Entity Name</th><th>Entity Value</th><th>Confidence</th></tr></thead>
                          <tbody><!-- NER 2 data rows --></tbody>
+                    </table>
+                </div>
+                <div id="comparison-output" class="hidden"> <!-- Added Comparison Output Div -->
+                    <!-- Removed <h3>Comparison Results</h3> -->
+                    <table id="comparison-table">
+                        <thead><tr><th>Entity Name</th><th>Entity Value</th><th>Comparison</th><th>Confidence (%)</th></tr></thead>
+                        <tbody><!-- Comparison data rows --></tbody>
                     </table>
                 </div>
             </div>
@@ -67,6 +74,7 @@
                 <button id="raw-button" class="output-toggle active">RAW</button>
                 <button id="ner1-button" class="output-toggle">NER 1</button>
                 <button id="ner2-button" class="output-toggle">NER 2</button>
+                <button id="compare-button" class="output-toggle">Compare</button> <!-- Added Compare Button -->
             </div>
         </div>
     </div>

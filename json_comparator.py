@@ -108,13 +108,13 @@ def compare_json_files(
         
     except Exception as e:
         raise ValueError(f"Comparison failed: {str(e)}")
-def run_json_comparison(file1_path, file2_path):
+def run_json_comparison(data1: Dict, data2: Dict):
     """
-    Compares two JSON files and returns the comparison result dictionary.
+    Compares two NER result dictionaries and returns the comparison result dictionary.
 
     Args:
-        file1_path (str): Path to the first JSON file.
-        file2_path (str): Path to the second JSON file.
+        data1 (dict): The first NER result dictionary (e.g., {"entities": [...]}).
+        data2 (dict): The second NER result dictionary.
 
     Returns:
         dict: A dictionary containing the comparison results.
@@ -123,18 +123,68 @@ def run_json_comparison(file1_path, file2_path):
         ValueError: If file loading or comparison fails.
     """
     try:
-        data1 = load_json_file(file1_path)
-        data2 = load_json_file(file2_path)
-        result = compare_json_data(data1, data2)
-        return result
+        # Data is now passed directly as arguments, no need to load files here
+        # data1 = load_json_file(file1_path)
+        # data2 = load_json_file(file2_path)
+        # Assuming the structure is {"entities": [...]} based on feedback
+        entities1 = data1.get("entities", [])
+        entities2 = data2.get("entities", [])
+
+        if not isinstance(entities1, list) or not isinstance(entities2, list):
+             raise ValueError("Input JSON must contain an 'entities' list.")
+
+        # Create dictionaries keyed by name+value
+        dict1 = {f"{e.get('entity_name', '')}_{e.get('entity_value', '')}": e for e in entities1 if e.get('entity_name') and e.get('entity_value')}
+        dict2 = {f"{e.get('entity_name', '')}_{e.get('entity_value', '')}": e for e in entities2 if e.get('entity_name') and e.get('entity_value')}
+
+        all_keys = sorted(list(set(dict1.keys()).union(set(dict2.keys()))))
+
+        comparison_results = []
+        for key in all_keys:
+            entity1 = dict1.get(key)
+            entity2 = dict2.get(key)
+            result_entity = {}
+
+            if entity1 and entity2: # Match
+                result_entity['entity_name'] = entity1['entity_name']
+                result_entity['entity_value'] = entity1['entity_value']
+                result_entity['comparison'] = "match"
+                # Confidence calculation
+                try:
+                    c1 = float(entity1.get('confidence', 0)) / 100.0
+                    c2 = float(entity2.get('confidence', 0)) / 100.0
+                    c_final = (1.0 - ((1.0 - c1) * (1.0 - c2))) * 100.0
+                    # Format to reasonable precision, e.g., 2 decimal places
+                    result_entity['confidence'] = round(c_final, 2)
+                except (ValueError, TypeError):
+                     # Handle cases where confidence is missing or not a number
+                     result_entity['confidence'] = "N/A" # Or some other indicator
+            elif entity1: # Addition (in NER1 only)
+                result_entity = entity1.copy() # Copy original entity
+                result_entity['comparison'] = "addition"
+                # Keep original confidence (ensure it's handled as number/string consistently)
+                result_entity['confidence'] = entity1.get('confidence', 'N/A')
+            elif entity2: # Omission (in NER2 only)
+                result_entity = entity2.copy() # Copy original entity
+                result_entity['comparison'] = "omission"
+                 # Keep original confidence
+                result_entity['confidence'] = entity2.get('confidence', 'N/A')
+
+            if result_entity: # Ensure we have something to add
+                comparison_results.append(result_entity)
+
+        # Return in the same structure as input if needed, or just the list
+        return {"entities": comparison_results}
+
     except Exception as e:
         # Re-raise exceptions to be handled by the caller
-        raise ValueError(f"Comparison failed for {file1_path} and {file2_path}: {str(e)}")
+        # Adjust error message as paths are not used here directly
+        raise ValueError(f"Comparison failed: {str(e)}")
 
 
-def main():
-    """CLI entry point for JSON comparison"""
-def main():
+# Remove duplicate main definition
+# def main():
+#     """CLI entry point for JSON comparison - Loads files and calls compare_json_files"""
     """CLI entry point for JSON comparison"""
     import argparse
     import sys
