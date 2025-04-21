@@ -98,6 +98,15 @@ h1, h2, h3 {
     display: block;
 }
 
+/* New class to make content fit its container's width initially */
+.fit-container {
+    width: 100%; /* Fit to container width */
+    height: auto; /* Adjust height automatically */
+    display: block; /* Consistent display */
+    /* Reverted max-width, max-height, object-fit */
+}
+
+
 #output-display-area {
     border: 1px solid #bbb;
     background-color: #fff;
@@ -105,7 +114,7 @@ h1, h2, h3 {
     margin-top: 10px;
     font-family: monospace;
     white-space: pre-wrap; /* Wrap long lines in raw text */
-    overflow-y: auto; /* Allow vertical scrolling specifically */
+    overflow: auto; /* Allow BOTH horizontal and vertical scrolling */
     flex-grow: 1; /* Allow display area to grow */
     /* Ensure child divs don't prevent scrolling */
     display: block; /* Or adjust based on content */

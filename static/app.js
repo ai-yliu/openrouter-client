@@ -131,17 +131,27 @@ document.addEventListener('DOMContentLoaded', () => {
             fileDisplayArea.innerHTML = ''; // Clear loading state
 
             if (data.content_type === 'image_base64' && data.base64_data) {
+                // Create a wrapper div for zooming
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('image-zoom-wrapper'); // Add a class for targeting
+
                 const img = document.createElement('img');
                 img.alt = 'Uploaded Image';
+                img.classList.add('fit-container'); // Image fits wrapper width
                 img.onerror = () => {
                     console.error(`Error rendering base64 image for task ${vlmTaskId}`);
-                    fileDisplayArea.innerHTML = '<p>Error rendering image preview.</p>';
+                    wrapper.innerHTML = '<p>Error rendering image preview.</p>'; // Put error in wrapper
                 };
                 // Construct Data URL
                 img.src = `data:${data.mime_type || 'image/jpeg'};base64,${data.base64_data}`;
-                fileDisplayArea.appendChild(img);
+
+                // Append image to wrapper, then wrapper to display area
+                wrapper.appendChild(img);
+                fileDisplayArea.appendChild(wrapper);
+
             } else if (data.content_type === 'pdf_base64') {
                  // PDF preview from base64 is complex, show message or use embed if served differently
+                 // If implementing PDF preview, apply similar wrapper strategy
                  fileDisplayArea.innerHTML = '<p>PDF uploaded. Preview via base64 not implemented.</p>';
                  // If you were serving PDFs via /uploads/ route still:
                  // const embed = document.createElement('embed');
@@ -241,6 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (task.task_type === 'json_comparison') {
                         taskIds.comparison = task.task_id;
                         taskStatus.comparison = task.status;
+                    } else if (task.task_type === 'vlm_review') { // Added check for review task
+                        taskIds.review = task.task_id;
+                        taskStatus.review = task.status;
                     }
                 });
             }
@@ -509,7 +522,8 @@ document.addEventListener('DOMContentLoaded', () => {
         reviewTableBody.innerHTML = ''; // Clear previous rows
 
         let compEntities = null;
-        let reviewedEntitiesMap = new Map(); // Use a Map for efficient lookup
+        // Map to store reviewed status: key = "name::value" (normalized), value = "yes"/"no"
+        let reviewedStatusMap = new Map();
 
         // Safely extract comparison entities
         try {
@@ -522,36 +536,42 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Safely extract and map reviewed entities (assuming structure {reviewed_entities: [...]})
-        // Adapt this based on the actual structure returned by your review VLM
+        // Safely extract and map reviewed status from the review task result
+        // Assumes structure like {"entities": [{"name": "...", "value": "...", "reviewed": "yes/no"}, ...]}
+        // Handles potential nesting within choices/message/content
         try {
-            let rawReviewedEntities = reviewResult?.reviewed_entities; // Access potentially nested key
-
-             // Handle if the VLM response is nested within choices/message/content
-             if (!rawReviewedEntities && reviewResult?.choices?.[0]?.message?.content) {
+            let reviewEntities = null;
+            if (reviewResult && reviewResult.entities && Array.isArray(reviewResult.entities)) {
+                reviewEntities = reviewResult.entities;
+            } else if (reviewResult?.choices?.[0]?.message?.content) {
                  let content = reviewResult.choices[0].message.content;
                  if (typeof content === 'string') {
-                     try { content = JSON.parse(content); } catch (e) { /* ignore parse error here */ }
+                     try { content = JSON.parse(content); } catch (e) { /* ignore parse error */ }
                  }
-                 rawReviewedEntities = content?.reviewed_entities;
-             }
+                 if (content && content.entities && Array.isArray(content.entities)) {
+                    reviewEntities = content.entities;
+                 }
+            }
 
-
-            if (rawReviewedEntities && Array.isArray(rawReviewedEntities)) {
-                rawReviewedEntities.forEach(entity => {
+            if (reviewEntities) {
+                reviewEntities.forEach(entity => {
                     const name = entity.entity_name;
                     const value = entity.entity_value;
-                    if (name && value) {
-                        const key = `${name}::${value}`; // Create a unique key
-                        reviewedEntitiesMap.set(key, true); // Mark this combination as reviewed
+                    const reviewed = entity.reviewed; // Get the actual status ("yes" or "no")
+
+                    if (name && value && reviewed !== undefined) {
+                        // Normalize key: lowercase and trim whitespace
+                        const key = `${String(name).trim().toLowerCase()}::${String(value).trim().toLowerCase()}`;
+                        // Store the actual status, defaulting to "no" if value is unexpected
+                        reviewedStatusMap.set(key, String(reviewed).toLowerCase() === 'yes' ? 'Yes' : 'No');
                     }
                 });
             } else {
-                 console.warn("Could not find 'reviewed_entities' array in review VLM output:", reviewResult);
+                 console.warn("Could not find 'entities' array in review VLM output:", reviewResult);
             }
         } catch (e) {
             console.error("Error processing review result structure:", e);
-            // Don't stop rendering, just proceed without reviewed status
+            // Proceed without reviewed status if parsing fails
         }
 
 
@@ -562,9 +582,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const comparison = entity.comparison || entity.match || '[N/A]'; // Handle both keys
                 const confidence = entity.confidence !== undefined ? entity.confidence : '[N/A]';
 
-                // Check if this entity was reviewed
-                const reviewKey = `${name}::${value}`;
-                const reviewedStatus = reviewedEntitiesMap.has(reviewKey) ? 'Yes' : 'No';
+                let reviewedStatus = 'No'; // Default status
+
+                // Check if the comparison status is 'match'
+                if (String(comparison).toLowerCase() === 'match') {
+                    reviewedStatus = 'N/A'; // Set to N/A for matched items
+                } else {
+                    // Only look up in the map if it's not a match
+                    const reviewKey = `${String(name).trim().toLowerCase()}::${String(value).trim().toLowerCase()}`;
+                    reviewedStatus = reviewedStatusMap.get(reviewKey) || 'No'; // Get status from map, default to 'No'
+                }
+
 
                 reviewTableBody.innerHTML += `<tr>
                     <td>${escapeHtml(name)}</td>
@@ -636,24 +664,35 @@ document.addEventListener('DOMContentLoaded', () => {
         showOutputSection(reviewOutputDiv); // Use helper
         updateStatus('Displaying Review Results');
 
-        // Fetch comparison AND review results if not already loaded and tasks exist
-        if (currentJobId && !reviewLoaded && taskIds.comparison && taskIds.review) {
+        // Fetch comparison AND review results if not already loaded and tasks are completed
+        if (currentJobId && !reviewLoaded && taskIds.comparison && taskIds.review && taskStatus.comparison === 'completed' && taskStatus.review === 'completed') {
              fetchAndRenderReviewData(currentJobId); // Call new function
-        } else if (!taskIds.comparison || !taskIds.review) {
+        } else if (!taskIds.comparison || !taskIds.review || taskStatus.comparison !== 'completed' || taskStatus.review !== 'completed') { // Check statuses here too
             updateStatus('Comparison or Review task not yet available or completed.');
             reviewTableBody.innerHTML = '<tr><td colspan="5">Comparison and Review tasks must complete first.</td></tr>'; // Update colspan
         } else if (reviewLoaded) {
-             updateStatus('Displaying previously loaded Review Results'); // Already loaded
+             // Data is loaded, just ensure the section is visible (already handled by showOutputSection)
+             updateStatus('Displaying previously loaded Review Results');
         }
     });
 
 
     function applyZoom() {
-        const displayElement = fileDisplayArea.querySelector('img, embed'); // Target image or embed
-        if (displayElement) {
-            displayElement.style.transformOrigin = 'top left'; // Zoom from top-left
-            displayElement.style.transform = `scale(${currentZoomLevel})`;
+        // Target the wrapper div for scaling
+        const zoomWrapper = fileDisplayArea.querySelector('.image-zoom-wrapper');
+        if (zoomWrapper) {
+            zoomWrapper.style.transformOrigin = 'top left'; // Zoom from top-left
+            zoomWrapper.style.transform = `scale(${currentZoomLevel})`;
+            // Note: The image inside the wrapper retains its .fit-container style (width: 100%)
         }
+        // Also handle potential PDF embeds if implemented similarly
+        const pdfEmbed = fileDisplayArea.querySelector('embed'); // Example
+         if (pdfEmbed) {
+             // Apply zoom directly or via wrapper depending on implementation
+             pdfEmbed.style.transformOrigin = 'top left';
+             pdfEmbed.style.transform = `scale(${currentZoomLevel})`;
+         }
+
         if (zoomLevelDisplay) {
             zoomLevelDisplay.textContent = `${Math.round(currentZoomLevel * 100)}%`;
         }
