@@ -23,13 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const compareButton = document.getElementById('compare-button'); // Added
     const comparisonOutputDiv = document.getElementById('comparison-output'); // Added
     const comparisonTableBody = document.querySelector('#comparison-table tbody'); // Added
+    const reviewButton = document.getElementById('review-button'); // Added for Review
+    const reviewOutputDiv = document.getElementById('review-output'); // Added for Review
+    const reviewTableBody = document.querySelector('#review-table tbody'); // Added for Review
 
     // --- State ---
     let currentJobId = null;
     let currentUploadedFilename = null;
     let pollingInterval = null;
-    let taskIds = {}; // {vlm: ..., ner1: ..., ner2: ..., comparison: ...}
-    let taskStatus = {}; // {vlm: '', ner1: '', ner2: '', comparison: ''}
+    let taskIds = {}; // {vlm: ..., ner1: ..., ner2: ..., comparison: ..., review: ...} // Added review
+    let taskStatus = {}; // {vlm: '', ner1: '', ner2: '', comparison: '', review: ''} // Added review
     let rawTextLoaded = false;
     let ner1Loaded = false;
     let ner2Loaded = false;
@@ -37,6 +40,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let ner2Data = null;
     let comparisonData = null; // Added
     let comparisonLoaded = false; // Added
+    let reviewData = null; // Added for Review
+    let reviewLoaded = false; // Added for Review
     let currentZoomLevel = 1.0; // Start at 100%
 
     // --- Functions ---
@@ -52,9 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ner1TableBody.innerHTML = '';
         ner2TableBody.innerHTML = '';
         comparisonTableBody.innerHTML = ''; // Added
+        reviewTableBody.innerHTML = ''; // Added for Review
         ner1OutputDiv.classList.add('hidden');
         ner2OutputDiv.classList.add('hidden');
         comparisonOutputDiv.classList.add('hidden'); // Added
+        reviewOutputDiv.classList.add('hidden'); // Added for Review
         rawTextOutput.classList.remove('hidden'); // Show raw by default
         setActiveOutputButton(rawButton);
         updateStatus('Idle');
@@ -66,9 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ner1Loaded = false;
         ner2Loaded = false;
         comparisonLoaded = false; // Added
+        reviewLoaded = false; // Added for Review
         ner1Data = null;
         ner2Data = null;
         comparisonData = null; // Added
+        reviewData = null; // Added for Review
         fileInput.value = ''; // Clear file input
         if (pollingInterval) {
             clearInterval(pollingInterval);
@@ -80,11 +89,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setActiveOutputButton(activeButton) {
-        [rawButton, ner1Button, ner2Button, compareButton].forEach(button => { // Added compareButton
+        [rawButton, ner1Button, ner2Button, compareButton, reviewButton].forEach(button => {
             button.classList.remove('active');
         });
-        activeButton.classList.add('active');
+        if (activeButton) {
+            activeButton.classList.add('active');
+        }
     }
+
+    // Helper function to manage visibility of output sections
+    function showOutputSection(sectionToShow) {
+        // Hide all sections first
+        rawTextOutput.classList.add('hidden');
+        ner1OutputDiv.classList.add('hidden');
+        ner2OutputDiv.classList.add('hidden');
+        comparisonOutputDiv.classList.add('hidden');
+        reviewOutputDiv.classList.add('hidden');
+
+        // Show the requested section
+        if (sectionToShow) {
+            sectionToShow.classList.remove('hidden');
+        }
+    }
+
 
     async function displayFile(vlmTaskId) {
         fileDisplayArea.innerHTML = '<p>Loading preview...</p>'; // Show loading state
@@ -428,6 +455,131 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Review Functions (New) ---
+
+    async function fetchAndRenderReviewData(jobId) {
+        if (!jobId || !taskIds.comparison || !taskIds.review) {
+            updateStatus('Cannot fetch review data: Missing comparison or review task ID.', true);
+            return;
+        }
+        updateStatus('Fetching comparison and review results...');
+        reviewTableBody.innerHTML = '<tr><td colspan="5">Loading review data...</td></tr>'; // Update colspan
+
+        try {
+            // Fetch both comparison and review outputs concurrently
+            const [compResponse, reviewResponse] = await Promise.all([
+                fetch(`/api/v1/tasks/${taskIds.comparison}/output`),
+                fetch(`/api/v1/tasks/${taskIds.review}/output`)
+            ]);
+
+            // Check both responses
+            if (!compResponse.ok) {
+                const compError = await compResponse.json();
+                throw new Error(`Comparison fetch failed: ${compError.error || compResponse.statusText}`);
+            }
+            if (!reviewResponse.ok) {
+                const reviewError = await reviewResponse.json();
+                throw new Error(`Review fetch failed: ${reviewError.error || reviewResponse.statusText}`);
+            }
+
+            const compData = await compResponse.json();
+            const revData = await reviewResponse.json();
+
+            // Store the fetched data
+            comparisonData = compData.output_comparison_json; // Store comparison if needed elsewhere too
+            reviewData = revData.output_review_json; // Store review data
+
+            if (!comparisonData || !reviewData) {
+                 throw new Error('Missing comparison or review data in API response.');
+            }
+
+            renderReviewTable(comparisonData, reviewData); // Pass the actual data objects
+            reviewLoaded = true; // Mark as loaded
+            updateStatus('Review results loaded.');
+
+        } catch (error) {
+            console.error("Error fetching or rendering review data:", error);
+            reviewTableBody.innerHTML = `<tr><td colspan="5">Error loading review data: ${error.message}</td></tr>`; // Update colspan
+            updateStatus(`Error loading review data: ${error.message}`, true);
+            reviewLoaded = false; // Ensure it's marked as not loaded on error
+        }
+    }
+
+    function renderReviewTable(compResult, reviewResult) {
+        reviewTableBody.innerHTML = ''; // Clear previous rows
+
+        let compEntities = null;
+        let reviewedEntitiesMap = new Map(); // Use a Map for efficient lookup
+
+        // Safely extract comparison entities
+        try {
+            if (compResult && compResult.entities && Array.isArray(compResult.entities)) {
+                compEntities = compResult.entities;
+            }
+        } catch (e) {
+            console.error("Error accessing entities in comparison result:", e);
+            reviewTableBody.innerHTML = `<tr><td colspan="5">Error processing comparison result structure.</td></tr>`;
+            return;
+        }
+
+        // Safely extract and map reviewed entities (assuming structure {reviewed_entities: [...]})
+        // Adapt this based on the actual structure returned by your review VLM
+        try {
+            let rawReviewedEntities = reviewResult?.reviewed_entities; // Access potentially nested key
+
+             // Handle if the VLM response is nested within choices/message/content
+             if (!rawReviewedEntities && reviewResult?.choices?.[0]?.message?.content) {
+                 let content = reviewResult.choices[0].message.content;
+                 if (typeof content === 'string') {
+                     try { content = JSON.parse(content); } catch (e) { /* ignore parse error here */ }
+                 }
+                 rawReviewedEntities = content?.reviewed_entities;
+             }
+
+
+            if (rawReviewedEntities && Array.isArray(rawReviewedEntities)) {
+                rawReviewedEntities.forEach(entity => {
+                    const name = entity.entity_name;
+                    const value = entity.entity_value;
+                    if (name && value) {
+                        const key = `${name}::${value}`; // Create a unique key
+                        reviewedEntitiesMap.set(key, true); // Mark this combination as reviewed
+                    }
+                });
+            } else {
+                 console.warn("Could not find 'reviewed_entities' array in review VLM output:", reviewResult);
+            }
+        } catch (e) {
+            console.error("Error processing review result structure:", e);
+            // Don't stop rendering, just proceed without reviewed status
+        }
+
+
+        if (compEntities && compEntities.length > 0) {
+            compEntities.forEach(entity => {
+                const name = entity.entity_name || '[N/A]';
+                const value = entity.entity_value || '[N/A]';
+                const comparison = entity.comparison || entity.match || '[N/A]'; // Handle both keys
+                const confidence = entity.confidence !== undefined ? entity.confidence : '[N/A]';
+
+                // Check if this entity was reviewed
+                const reviewKey = `${name}::${value}`;
+                const reviewedStatus = reviewedEntitiesMap.has(reviewKey) ? 'Yes' : 'No';
+
+                reviewTableBody.innerHTML += `<tr>
+                    <td>${escapeHtml(name)}</td>
+                    <td>${escapeHtml(value)}</td>
+                    <td>${escapeHtml(comparison)}</td>
+                    <td>${escapeHtml(String(confidence))}</td>
+                    <td>${escapeHtml(reviewedStatus)}</td>
+                </tr>`;
+            });
+        } else {
+            reviewTableBody.innerHTML = '<tr><td colspan="5">No comparison results found to review.</td></tr>';
+        }
+    }
+
+
     // Helper to prevent basic HTML injection
     function escapeHtml(unsafe) {
         if (unsafe === null || unsafe === undefined) return '';
@@ -445,37 +597,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     rawButton.addEventListener('click', () => {
         setActiveOutputButton(rawButton);
-        rawTextOutput.classList.remove('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.add('hidden');
+        showOutputSection(rawTextOutput); // Use helper
         updateStatus('Displaying Raw Text');
         if (taskIds.vlm && !rawTextLoaded) fetchRawText(taskIds.vlm);
     });
 
     ner1Button.addEventListener('click', () => {
         setActiveOutputButton(ner1Button);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.remove('hidden');
-        ner2OutputDiv.classList.add('hidden');
+        showOutputSection(ner1OutputDiv); // Use helper
         updateStatus('Displaying NER 1 Results');
         if (taskIds.ner1 && !ner1Loaded) fetchNER1(taskIds.ner1);
     });
 
      ner2Button.addEventListener('click', () => {
         setActiveOutputButton(ner2Button);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.remove('hidden');
+        showOutputSection(ner2OutputDiv); // Use helper
         updateStatus('Displaying NER 2 Results');
         if (taskIds.ner2 && !ner2Loaded) fetchNER2(taskIds.ner2);
     });
 
-    compareButton.addEventListener('click', () => { // Added listener for Compare button
+    compareButton.addEventListener('click', () => {
         setActiveOutputButton(compareButton);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.add('hidden');
-        comparisonOutputDiv.classList.remove('hidden'); // Show comparison table
+        showOutputSection(comparisonOutputDiv); // Use helper
         updateStatus('Displaying Comparison Results');
         // Fetch comparison results if not already loaded and job is done/comparison task exists
         if (currentJobId && !comparisonLoaded && taskIds.comparison) {
@@ -483,23 +626,27 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (!taskIds.comparison) {
             updateStatus('Comparison task not yet available or completed.');
         }
-        if (taskIds.ner2 && !ner2Loaded) fetchNER2(taskIds.ner2);
+        // Removed redundant fetchNER2 call from here
     });
 
-    compareButton.addEventListener('click', () => { // Added listener for Compare button
-        setActiveOutputButton(compareButton);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.add('hidden');
-        comparisonOutputDiv.classList.remove('hidden'); // Show comparison table
-        updateStatus('Displaying Comparison Results');
-        // Fetch comparison results if not already loaded and job is done/comparison task exists
-        if (currentJobId && !comparisonLoaded && taskIds.comparison) {
-             fetchComparisonResults(currentJobId); // Pass job ID, fetch function will get task ID
-        } else if (!taskIds.comparison) {
-            updateStatus('Comparison task not yet available or completed.');
+    // Removed duplicated compareButton listener
+
+    reviewButton.addEventListener('click', () => {
+        setActiveOutputButton(reviewButton);
+        showOutputSection(reviewOutputDiv); // Use helper
+        updateStatus('Displaying Review Results');
+
+        // Fetch comparison AND review results if not already loaded and tasks exist
+        if (currentJobId && !reviewLoaded && taskIds.comparison && taskIds.review) {
+             fetchAndRenderReviewData(currentJobId); // Call new function
+        } else if (!taskIds.comparison || !taskIds.review) {
+            updateStatus('Comparison or Review task not yet available or completed.');
+            reviewTableBody.innerHTML = '<tr><td colspan="5">Comparison and Review tasks must complete first.</td></tr>'; // Update colspan
+        } else if (reviewLoaded) {
+             updateStatus('Displaying previously loaded Review Results'); // Already loaded
         }
     });
+
 
     function applyZoom() {
         const displayElement = fileDisplayArea.querySelector('img, embed'); // Target image or embed
@@ -526,36 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyZoom();
     }
 
-    // --- Event Listeners ---
-    uploadButton.addEventListener('click', handleUpload);
-    clearButton.addEventListener('click', clearDisplay);
-
-    rawButton.addEventListener('click', () => {
-        setActiveOutputButton(rawButton);
-        rawTextOutput.classList.remove('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.add('hidden');
-        updateStatus('Displaying Raw Text');
-        if (taskIds.vlm && !rawTextLoaded) fetchRawText(taskIds.vlm);
-    });
-
-    ner1Button.addEventListener('click', () => {
-        setActiveOutputButton(ner1Button);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.remove('hidden');
-        ner2OutputDiv.classList.add('hidden');
-        updateStatus('Displaying NER 1 Results');
-        if (taskIds.ner1 && !ner1Loaded) fetchNER1(taskIds.ner1);
-    });
-
-     ner2Button.addEventListener('click', () => {
-        setActiveOutputButton(ner2Button);
-        rawTextOutput.classList.add('hidden');
-        ner1OutputDiv.classList.add('hidden');
-        ner2OutputDiv.classList.remove('hidden');
-        updateStatus('Displaying NER 2 Results');
-        if (taskIds.ner2 && !ner2Loaded) fetchNER2(taskIds.ner2);
-    });
+    // Removed duplicated tab button listeners (raw, ner1, ner2)
 
     // Zoom button listeners
     zoomInButton.addEventListener('click', zoomIn);

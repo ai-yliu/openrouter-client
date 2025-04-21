@@ -57,6 +57,12 @@
                          <tbody><!-- NER 2 data rows --></tbody>
                     </table>
                 </div>
+                <div id="review-output" class="hidden"> <!-- Added Review Output Div -->
+                    <table id="review-table">
+                        <thead><tr><th>Entity Name</th><th>Entity Value</th><th>Comparison</th><th>Confidence (%)</th><th>Reviewed</th></tr></thead>
+                        <tbody><!-- Review data rows --></tbody>
+                    </table>
+                </div>
                 <div id="comparison-output" class="hidden"> <!-- Added Comparison Output Div -->
                     <!-- Removed <h3>Comparison Results</h3> -->
                     <table id="comparison-table">
@@ -75,6 +81,7 @@
                 <button id="ner1-button" class="output-toggle">NER 1</button>
                 <button id="ner2-button" class="output-toggle">NER 2</button>
                 <button id="compare-button" class="output-toggle">Compare</button> <!-- Added Compare Button -->
+                <button id="review-button" class="output-toggle">Review</button> <!-- Added Review Button -->
             </div>
         </div>
     </div>

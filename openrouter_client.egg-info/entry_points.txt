@@ -1,3 +1,4 @@
 [console_scripts]
 compare-json = json_comparator:main
+compare-llms = compare_llms:main
 openrouter = openrouter_client:main

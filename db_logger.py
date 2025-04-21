@@ -11,6 +11,35 @@ import psycopg2 # Or psycopg if using version 3+
 from psycopg2 import sql # For safe dynamic SQL query construction
 import json # For handling JSONB data types
 
+# --- Database Schema Initialization (Example - Run this manually or integrate into an init script) ---
+# It's generally better to manage schema changes with migration tools (like Alembic)
+# or dedicated setup scripts rather than embedding CREATE TABLE in the application logic.
+# However, for simplicity in this context, we include the statements here as reference.
+
+# SQL to create the task_details_review table
+CREATE_REVIEW_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS task_details_review (
+    task_id UUID PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+    input_source TEXT, -- Original file path/URL or identifier
+    -- Consider adding input_content_type, input_content if needed for review context
+    api_request_model TEXT,
+    api_request_system_prompt TEXT,
+    api_request_user_prompt TEXT, -- Store the *modified* prompt with mismatched entities
+    api_request_temperature REAL,
+    api_request_top_p REAL,
+    api_request_stream BOOLEAN,
+    api_request_response_format JSONB,
+    api_request_provider_options JSONB,
+    output_review_json JSONB, -- Store the review VLM's output JSON
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+"""
+# You would typically execute this SQL using a cursor after connecting:
+# with conn.cursor() as cur:
+#     cur.execute(CREATE_REVIEW_TABLE_SQL)
+# conn.commit()
+
+
 # --- Database Connection ---
 
 def connect_db(config_path="db_config.ini"):
@@ -328,6 +357,87 @@ def log_comparison_details(conn, task_id, details_dict):
         print(f"Error logging Comparison details for task {task_id}: {error}", file=sys.stderr)
         conn.rollback()
 
+
+# [DELETED] Removed incorrectly nested log_review_details function definition.
+
+
+# Unindented the entire function definition
+def log_review_details(conn, task_id, details_dict):
+    """
+    Logs details specific to a VLM Review task into the task_details_review table.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the task.
+        details_dict (dict): Dictionary containing review task details, e.g.:
+            {
+                'input_source': 'path/or/id',
+                'api_request_model': 'model_name',
+                'api_request_system_prompt': 'prompt text',
+                'api_request_user_prompt': 'MODIFIED prompt text with entities',
+                'api_request_temperature': 0.3,
+                'api_request_top_p': 0.9,
+                'api_request_stream': False,
+                'api_request_response_format': {'type': 'json_object'}, # JSONB
+                'api_request_provider_options': {'option': 'value'} # JSONB
+            }
+    """
+    sql_query = """
+        INSERT INTO task_details_review (
+            task_id, input_source,
+            api_request_model, api_request_system_prompt, api_request_user_prompt,
+            api_request_temperature, api_request_top_p, api_request_stream,
+            api_request_response_format, api_request_provider_options
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    # Prepare data tuple, using .get() for optional fields
+    response_format_json = None
+    if isinstance(details_dict.get('api_request_response_format'), (dict, list)):
+        response_format_json = json.dumps(details_dict['api_request_response_format'])
+
+    provider_options_json = None
+    if isinstance(details_dict.get('api_request_provider_options'), (dict, list)):
+        provider_options_json = json.dumps(details_dict['api_request_provider_options'])
+
+    data = (
+        task_id,
+        details_dict.get('input_source'),
+        details_dict.get('api_request_model'),
+        details_dict.get('api_request_system_prompt'),
+        details_dict.get('api_request_user_prompt'), # Use the modified prompt
+        details_dict.get('api_request_temperature'),
+        details_dict.get('api_request_top_p'),
+        details_dict.get('api_request_stream'),
+        response_format_json,
+        provider_options_json
+    )
+    # Add final debug before entering the DB interaction block
+    print(f"DEBUG DB (Review): Prepared data tuple for task {task_id}. Types: {[type(d) for d in data]}")
+    try:
+        print(f"DEBUG DB (Review): Inside try block for task {task_id}")
+        with conn.cursor() as cur:
+            print(f"DEBUG DB (Review): Cursor created for task {task_id}") # ADDED
+            cur.execute(sql_query, data)
+            print(f"DEBUG DB (Review): Execute successful for task {task_id}") # ADDED
+            conn.commit()
+            print(f"DEBUG DB (Review): Commit successful for task {task_id}") # ADDED
+            # This is the original success message, now redundant with the one above but keep for confirmation
+            print(f"Logged Review details for task {task_id}")
+    except (Exception, psycopg2.DatabaseError) as error:
+        # More detailed error logging
+        print(f"ERROR logging Review details for task {task_id}:", file=sys.stderr)
+        print(f"  Error Type: {type(error).__name__}", file=sys.stderr)
+        print(f"  Error Details: {error}", file=sys.stderr)
+        # Print details about the data that failed
+        print(f"  Failing Data Tuple (types): {[type(d) for d in data]}", file=sys.stderr)
+        # Avoid printing potentially large data directly, maybe just keys/lengths if needed
+        # print(f"  Failing Data Tuple (values): {data}", file=sys.stderr)
+        conn.rollback()
+        # Re-raise the exception so the calling function knows it failed
+        raise error
+
+
 # Placeholder function for updating output - implementation needed
 # This would construct UPDATE statements for the respective task_details_* tables
 
@@ -409,6 +519,28 @@ def update_task_details_output(conn, task_id, task_type, output_data, api_respon
 
             data = (
                 output_comparison_json_for_db, # Pass the JSON string
+                task_id
+            )
+        elif task_type == 'vlm_review':
+            sql_query = """
+                UPDATE task_details_review
+                SET output_review_json = %s
+                WHERE task_id = %s;
+            """
+            # Convert the output_review_json dictionary to a JSON string
+            output_review_json_for_db = None
+            output_review_value = output_data.get('output_review_json')
+            if isinstance(output_review_value, (dict, list)):
+                 try:
+                     output_review_json_for_db = json.dumps(output_review_value)
+                 except TypeError as e:
+                     print(f"Error serializing Review output to JSON for task {task_id}: {e}", file=sys.stderr)
+                     # Log None if serialization fails
+            elif isinstance(output_review_value, str):
+                 output_review_json_for_db = output_review_value
+
+            data = (
+                output_review_json_for_db, # Pass the JSON string
                 task_id
             )
         else:
@@ -613,6 +745,32 @@ def get_comparison_output(conn, task_id):
     except (Exception, psycopg2.DatabaseError) as error:
         print(f"Error retrieving comparison output for task {task_id}: {error}", file=sys.stderr)
     return output_json
+
+
+def get_review_output(conn, task_id):
+    """
+    Retrieves the output_review_json for a VLM Review task.
+
+    Args:
+        conn: Database connection object.
+        task_id (str): UUID of the review task.
+
+    Returns:
+        dict: The review output JSON, or None if not found or error occurs.
+    """
+    output_json = None
+    sql_query = "SELECT output_review_json FROM task_details_review WHERE task_id = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql_query, (task_id,))
+            result = cur.fetchone()
+            if result and result[0]:
+                # The data is stored as JSONB, psycopg2 usually returns it as a dict
+                output_json = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error retrieving Review output for task {task_id}: {error}", file=sys.stderr)
+    return output_json
+
 
 
 # Example usage (for testing purposes, can be removed later)
